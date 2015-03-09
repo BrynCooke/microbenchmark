@@ -31,7 +31,7 @@ import java.util.Random;
 @BenchmarkMethodChart(filePrefix = "benchmark-queries")
 public class Benchmark extends AbstractCassandraTest {
     private static Logger log = LoggerFactory.getLogger(Benchmark.class);
-    private static int maxRecords = 1000000;
+    private static int maxRecords = 10000000;
     private static int searches = 100000;
     @Rule
     public TestRule benchmarkRun = new BenchmarkRule();
@@ -65,7 +65,7 @@ public class Benchmark extends AbstractCassandraTest {
     }
 
     @Test
-    @BenchmarkOptions(benchmarkRounds = 2, warmupRounds = 2)
+    @BenchmarkOptions(benchmarkRounds = 2, warmupRounds = 1)
     public void testRepeatedQueries() {
         Random random = new Random();
         log.info("Querying repeated");
@@ -80,7 +80,7 @@ public class Benchmark extends AbstractCassandraTest {
     }
 
     @Test
-    @BenchmarkOptions(benchmarkRounds = 2, warmupRounds = 2)
+    @BenchmarkOptions(benchmarkRounds = 2, warmupRounds = 1)
     public void testSequentialQueries() {
         log.info("Querying sequentially");
         for (int count = 0; count < maxRecords && count < searches; count++) {
@@ -95,7 +95,7 @@ public class Benchmark extends AbstractCassandraTest {
 
 //  The idea here was to query the rows 100 at a time, but it gets stuck on the third query....
 //    @Test
-//    @BenchmarkOptions(benchmarkRounds = 2, warmupRounds = 2)
+//    @BenchmarkOptions(benchmarkRounds = 2, warmupRounds = 1)
 //    public void testTokenSliceQueries() {
 //        log.info("Querying token slices");
 //        for(int count = 0; count < maxRecords && count < searches / 100; count++) {
@@ -109,7 +109,7 @@ public class Benchmark extends AbstractCassandraTest {
 
 
     @Test
-    @BenchmarkOptions(benchmarkRounds = 2, warmupRounds = 2)
+    @BenchmarkOptions(benchmarkRounds = 2, warmupRounds = 1)
     public void testLimitQuery() {
         log.info("Querying with limit");
         QueryProcessor.executeInternal("SELECT * FROM vertex LIMIT ?", searches).iterator().forEachRemaining(r -> {
@@ -118,7 +118,7 @@ public class Benchmark extends AbstractCassandraTest {
     }
 
     @Test
-    @BenchmarkOptions(benchmarkRounds = 2, warmupRounds = 2)
+    @BenchmarkOptions(benchmarkRounds = 2, warmupRounds = 1)
     public void testRandomQueries() {
         log.info("Querying randomly");
         Random random = new Random();
@@ -135,7 +135,7 @@ public class Benchmark extends AbstractCassandraTest {
 
 
     @Test
-    @BenchmarkOptions(benchmarkRounds = 2, warmupRounds = 2)
+    @BenchmarkOptions(benchmarkRounds = 2, warmupRounds = 1)
     public void testStorageProxyQuery() {
         log.info("Querying via storage proxy");
         CFMetaData metadata = Schema.instance.getCFMetaData("microbenchmark", "vertex");
