@@ -187,22 +187,26 @@ public class SkinnyRowsBenchmark {
     private void queryWithInClause(int inSize, int threads) {
 
         CountDownLatch latch = new CountDownLatch(threads);
-        Runnable r = () -> {
-            for (int count = 0; count < maxRecords && count < searches / inSize / threads; count += inSize) {
-                logProgress(count);
 
-                Object[] ids = new Object[inSize];
-                for (int offset = 0; offset < inSize; offset++) {
-                    ids[offset] = new Long(count + offset);
-                }
-
-                QueryProcessor.executeInternal("SELECT * FROM vertex WHERE vertex_id IN (" + StringUtils.repeat("?, ", inSize - 1) + "?)", ids).iterator().forEachRemaining(row -> {
-                });
-            }
-            latch.countDown();
-        };
 
         for( int thread = 0; thread < threads; thread++) {
+            final int threadNumber = thread + 1;
+            Runnable r = () -> {
+                for (int count = inSize * threadNumber; count < maxRecords && count < searches; count += inSize * threads) {
+
+                    logProgress(count);
+
+                    Object[] ids = new Object[inSize];
+                    for (int offset = 0; offset < inSize; offset++) {
+                        ids[offset] = new Long(count + offset);
+                    }
+
+                    QueryProcessor.executeInternal("SELECT * FROM vertex WHERE vertex_id IN (" + StringUtils.repeat("?, ", inSize - 1) + "?)", ids).iterator().forEachRemaining(row -> {
+                    });
+                }
+                latch.countDown();
+            };
+
             if(threads > 1) {
                 new Thread(r).start();
             }
@@ -267,9 +271,10 @@ public class SkinnyRowsBenchmark {
         ParsedStatement.Prepared prepared = QueryProcessor.parseStatement("SELECT * FROM microbenchmark.vertex WHERE vertex_id = ?", QueryState.forInternalCalls());
         log.info("Querying randomly using prepared statments");
         Random random = new Random();
+        QueryState queryState = QueryState.forInternalCalls();
         for (int count = 0; count < maxRecords && count < searches; count++) {
             logProgress(count);
-            ResultMessage result = prepared.statement.execute(QueryState.forInternalCalls(), QueryOptions.create(ConsistencyLevel.ONE, Arrays.asList(LongType.instance.decompose((long) random.nextInt(maxRecords))), true, 1, null, null));
+            ResultMessage result = prepared.statement.execute(queryState, QueryOptions.create(ConsistencyLevel.ONE, Arrays.asList(LongType.instance.decompose((long) random.nextInt(maxRecords))), true, 1, null, null));
             UntypedResultSet rows = UntypedResultSet.create(((ResultMessage.Rows) result).result);
             rows.forEach(r->{});
         }
