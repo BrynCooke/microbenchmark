@@ -15,11 +15,13 @@ import org.apache.cassandra.db.filter.ColumnSlice;
 import org.apache.cassandra.db.filter.IDiskAtomFilter;
 import org.apache.cassandra.db.filter.SliceQueryFilter;
 import org.apache.cassandra.db.marshal.LongType;
+import org.apache.cassandra.exceptions.InvalidRequestException;
 import org.apache.cassandra.service.ClientState;
 import org.apache.cassandra.service.QueryState;
 import org.apache.cassandra.service.StorageProxy;
 import org.apache.cassandra.transport.messages.ResultMessage;
 import org.apache.commons.lang3.StringUtils;
+import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Rule;
 import org.junit.Test;
@@ -33,12 +35,13 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Random;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Created by bryn on 06/03/15.
  */
 @AxisRange(min = 0, max = 60)
-@BenchmarkMethodChart(filePrefix = "benchmark-queries")
+@BenchmarkMethodChart(filePrefix = "skinny-queries")
 @RunWith(CassandraRunner.class)
 public class SkinnyRowsBenchmark {
     private static Logger log = LoggerFactory.getLogger(SkinnyRowsBenchmark.class);
@@ -47,11 +50,17 @@ public class SkinnyRowsBenchmark {
     @Rule
     public TestRule benchmarkRun = new BenchmarkRule();
 
+
+    private AtomicInteger retrievalCount = new AtomicInteger(0);
+
+
     @BeforeClass
     public static void setupData() {
 
+        try {
+            QueryProcessor.executeInternal("SELECT * FROM vertex WHERE vertex_id = ?", 0L).iterator().hasNext();
 
-        if (!QueryProcessor.executeInternal("SELECT * FROM vertex WHERE vertex_id = ?", 0L).iterator().hasNext()) {
+        } catch (InvalidRequestException e) {
             insertVertexData();
         }
     }
@@ -77,25 +86,29 @@ public class SkinnyRowsBenchmark {
     @Test
     @BenchmarkOptions(benchmarkRounds = 2, warmupRounds = 1)
     public void testAWarmup() {
-        Random random = new Random();
+        Random random = new Random(0);
         for (int count = 0; count < maxRecords && count < searches; count++) {
             logProgress(count);
 
             QueryProcessor.executeInternal("SELECT * FROM vertex WHERE vertex_id = ?", (long) random.nextInt(maxRecords)).iterator().forEachRemaining(r -> {
+                retrievalCount.incrementAndGet();
             });
         }
+        Assert.assertEquals(searches, retrievalCount.get());
     }
 
     @Test
     @BenchmarkOptions(benchmarkRounds = 2, warmupRounds = 1)
     public void testRepeatedRows() {
-        Random random = new Random();
+        Random random = new Random(0);
         log.info("Querying repeated");
         for (int count = 0; count < maxRecords && count < searches; count++) {
             logProgress(count);
             QueryProcessor.executeInternal("SELECT * FROM vertex WHERE vertex_id = ?", (long) random.nextInt(100)).iterator().forEachRemaining(r -> {
+                retrievalCount.incrementAndGet();
             });
         }
+        Assert.assertEquals(searches, retrievalCount.get());
 
     }
 
@@ -106,8 +119,10 @@ public class SkinnyRowsBenchmark {
         for (int count = 0; count < maxRecords && count < searches; count++) {
             logProgress(count);
             QueryProcessor.executeInternal("SELECT * FROM vertex WHERE vertex_id = ?", (long) count).iterator().forEachRemaining(r -> {
+                retrievalCount.incrementAndGet();
             });
         }
+        Assert.assertEquals(searches, retrievalCount.get());
 
     }
 
@@ -117,7 +132,9 @@ public class SkinnyRowsBenchmark {
     public void testLimitQuery() {
         log.info("Querying with limit");
         QueryProcessor.executeInternal("SELECT * FROM vertex LIMIT ?", searches).iterator().forEachRemaining(r -> {
+            retrievalCount.incrementAndGet();
         });
+        Assert.assertEquals(searches, retrievalCount.get());
 
     }
 
@@ -219,19 +236,22 @@ public class SkinnyRowsBenchmark {
         } catch (InterruptedException e) {
             throw new RuntimeException(e);
         }
+        Assert.assertEquals(searches, retrievalCount.get());
+
     }
 
     @Test
     @BenchmarkOptions(benchmarkRounds = 2, warmupRounds = 1)
     public void testRandomRows() {
         log.info("Querying randomly");
-        Random random = new Random();
+        Random random = new Random(0);
         for (int count = 0; count < maxRecords && count < searches; count++) {
             logProgress(count);
 
             QueryProcessor.executeInternal("SELECT * FROM vertex WHERE vertex_id = ?", (long) random.nextInt(maxRecords)).iterator().forEachRemaining(r -> {
             });
         }
+        Assert.assertEquals(searches, retrievalCount.get());
 
     }
 
@@ -256,6 +276,7 @@ public class SkinnyRowsBenchmark {
 
         }
 
+        Assert.assertEquals(searches, retrievalCount.get());
 
     }
 
@@ -276,9 +297,12 @@ public class SkinnyRowsBenchmark {
             logProgress(count);
             ResultMessage result = prepared.statement.execute(queryState, QueryOptions.create(ConsistencyLevel.ONE, Arrays.asList(LongType.instance.decompose((long) random.nextInt(maxRecords))), true, 1, null, null));
             UntypedResultSet rows = UntypedResultSet.create(((ResultMessage.Rows) result).result);
-            rows.forEach(r->{});
+            rows.forEach(r->{
+                retrievalCount.incrementAndGet();
+            });
         }
 
+        Assert.assertEquals(searches, retrievalCount.get());
 
     }
 }
