@@ -42,7 +42,9 @@ public class WideRowsBenchmark {
     public static void setupData() {
 
         try {
-            QueryProcessor.executeInternal("SELECT * FROM vertexWide WHERE community = 1 AND vertex_id = ?", 0L).iterator().hasNext();
+            if(!QueryProcessor.executeInternal("SELECT * FROM vertexWide WHERE community = 1 AND vertex_id = ?", 0L).iterator().hasNext()) {
+                insertVertexData();
+            }
 
         } catch (InvalidRequestException e) {
             insertVertexData();

@@ -59,9 +59,10 @@ public class CassandraRunner extends BlockJUnit4ClassRunner {
 
     private static void prepareKeyspace() {
         try {
-            QueryProcessor.executeInternal("USE microbenchmark;");
-        } catch (KeyspaceNotDefinedException e) {
             QueryProcessor.executeInternal("CREATE KEYSPACE IF NOT EXISTS microbenchmark WITH REPLICATION = { 'class' : 'SimpleStrategy', 'replication_factor' : 1 };");
+            QueryProcessor.executeInternal("USE microbenchmark;");
+        }
+        catch(AssertionError e){
             QueryProcessor.executeInternal("USE microbenchmark;");
         }
 
