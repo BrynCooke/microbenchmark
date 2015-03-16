@@ -1,7 +1,5 @@
 import org.apache.cassandra.cql3.QueryProcessor;
-import org.apache.cassandra.db.KeyspaceNotDefinedException;
 import org.apache.cassandra.service.CassandraDaemon;
-import org.junit.runner.notification.RunNotifier;
 import org.junit.runners.BlockJUnit4ClassRunner;
 import org.junit.runners.model.InitializationError;
 
@@ -58,13 +56,8 @@ public class CassandraRunner extends BlockJUnit4ClassRunner {
     }
 
     private static void prepareKeyspace() {
-        try {
-            QueryProcessor.executeInternal("CREATE KEYSPACE IF NOT EXISTS microbenchmark WITH REPLICATION = { 'class' : 'SimpleStrategy', 'replication_factor' : 1 };");
-            QueryProcessor.executeInternal("USE microbenchmark;");
-        }
-        catch(AssertionError e){
-            QueryProcessor.executeInternal("USE microbenchmark;");
-        }
+        QueryProcessor.executeInternal("CREATE KEYSPACE IF NOT EXISTS microbenchmark WITH REPLICATION = { 'class' : 'SimpleStrategy', 'replication_factor' : 1 };");
+        QueryProcessor.executeInternal("USE microbenchmark;");
 
     }
 
