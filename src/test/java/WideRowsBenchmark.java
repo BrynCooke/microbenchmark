@@ -18,8 +18,7 @@ import org.junit.runner.RunWith;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.Arrays;
-import java.util.Random;
+import java.util.*;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -31,7 +30,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 @RunWith(CassandraRunner.class)
 public class WideRowsBenchmark {
     private static Logger log = LoggerFactory.getLogger(WideRowsBenchmark.class);
-    private static int maxRecords = 10000000;
+    private static int maxRecords = 100000;
     private static int searches = 100000;
     @Rule
     public TestRule benchmarkRun = new BenchmarkRule();
@@ -63,7 +62,7 @@ public class WideRowsBenchmark {
                 "vertex_id bigint," +
                 "name text," +
                 "age int," +
-                "PRIMARY KEY (community, vertex_id));");
+                "PRIMARY KEY (community, vertex_id)) WITH COMPRESSION = {'sstable_compression': ''};");
 
         log.info("Starting insert vertex data");
         Random random = new Random();
@@ -79,51 +78,13 @@ public class WideRowsBenchmark {
     @BenchmarkOptions(benchmarkRounds = 2, warmupRounds = 1)
     public void testAWarmup() {
         Random random = new Random(0);
-        for (int count = 0; count < maxRecords && count < searches; count++) {
+        for (int count = 0; count < searches; count++) {
             logProgress(count);
 
             QueryProcessor.executeInternal("SELECT * FROM vertexWide WHERE community = 1 AND vertex_id = ?", (long) random.nextInt(maxRecords)).iterator().forEachRemaining(r -> {
                 retrievalCount.incrementAndGet();
             });
         }
-        Assert.assertEquals(searches, retrievalCount.get());
-    }
-
-    @Test
-    @BenchmarkOptions(benchmarkRounds = 2, warmupRounds = 1)
-    public void testRepeatedRows() {
-        Random random = new Random(0);
-        log.info("Querying repeated");
-        for (int count = 0; count < maxRecords && count < searches; count++) {
-            logProgress(count);
-            QueryProcessor.executeInternal("SELECT * FROM vertexWide WHERE community = 1 AND vertex_id = ?", (long) random.nextInt(100)).iterator().forEachRemaining(r -> {
-                retrievalCount.incrementAndGet();
-            });
-        }
-        Assert.assertEquals(searches, retrievalCount.get());
-    }
-
-    @Test
-    @BenchmarkOptions(benchmarkRounds = 2, warmupRounds = 1)
-    public void testSequentialRows() {
-        log.info("Querying sequentially");
-        for (int count = 0; count < maxRecords && count < searches; count++) {
-            logProgress(count);
-            QueryProcessor.executeInternal("SELECT * FROM vertexWide WHERE community = 1 AND vertex_id = ?", (long) count).iterator().forEachRemaining(r -> {
-                retrievalCount.incrementAndGet();
-            });
-        }
-        Assert.assertEquals(searches, retrievalCount.get());
-    }
-
-
-    @Test
-    @BenchmarkOptions(benchmarkRounds = 2, warmupRounds = 1)
-    public void testLimitQuery() {
-        log.info("Querying with limit");
-        QueryProcessor.executeInternal("SELECT * FROM vertexWide LIMIT ?", searches).iterator().forEachRemaining(r -> {
-            retrievalCount.incrementAndGet();
-        });
         Assert.assertEquals(searches, retrievalCount.get());
     }
 
@@ -198,15 +159,19 @@ public class WideRowsBenchmark {
         for (int thread = 0; thread < threads; thread++) {
             final int threadNumber = thread + 1;
             Runnable r = () -> {
-                for (int count = inSize * threadNumber; count < maxRecords && count < searches + 1; count += inSize * threads) {
+                Random random = new Random(threadNumber);
+                for (int count = 0; count < searches; count += inSize * threads) {
 
                     logProgress(count);
-                    Object[] ids = new Object[inSize];
-                    for (int offset = 0; offset < inSize; offset++) {
-                        ids[offset] = new Long(count + offset);
+                    Set<Long> ids = new HashSet<>(inSize);
+                    while(ids.size() < inSize) {
+                        ids.add(new Long(random.nextInt(maxRecords)));
                     }
 
-                    QueryProcessor.executeInternal("SELECT * FROM vertexWide WHERE community = 1 AND vertex_id IN (" + StringUtils.repeat("?, ", inSize - 1) + "?)", ids).iterator().forEachRemaining(row -> {
+                    UntypedResultSet rows = QueryProcessor.executeInternal("SELECT * FROM vertexWide WHERE community = 1 AND vertex_id IN (" + StringUtils.repeat("?, ", inSize - 1) + "?)", ids.toArray());
+                    Assert.assertEquals(inSize, rows.size());
+
+                    rows.iterator().forEachRemaining(row -> {
                         retrievalCount.incrementAndGet();
                     });
                 }
@@ -232,7 +197,7 @@ public class WideRowsBenchmark {
     public void testRandomRows() {
         log.info("Querying randomly");
         Random random = new Random(0);
-        for (int count = 0; count < maxRecords && count < searches; count++) {
+        for (int count = 0; count < searches; count++) {
             logProgress(count);
 
             QueryProcessor.executeInternal("SELECT * FROM vertexWide WHERE community = 1 AND vertex_id = ?", (long) random.nextInt(maxRecords)).iterator().forEachRemaining(r -> {
@@ -249,23 +214,5 @@ public class WideRowsBenchmark {
         }
     }
 
-    @Test
-    @BenchmarkOptions(benchmarkRounds = 2, warmupRounds = 1)
-    public void testRandomRowsPreped() {
-        ParsedStatement.Prepared prepared = QueryProcessor.parseStatement("SELECT * FROM microbenchmark.vertexWide WHERE community = 1 AND vertex_id = ?", QueryState.forInternalCalls());
-        log.info("Querying randomly using prepared statments");
-        Random random = new Random(0);
-        QueryState queryState = QueryState.forInternalCalls();
-        for (int count = 0; count < maxRecords && count < searches; count++) {
-            logProgress(count);
-            ResultMessage result = prepared.statement.execute(queryState, QueryOptions.create(ConsistencyLevel.ONE, Arrays.asList(LongType.instance.decompose((long) random.nextInt(maxRecords))), true, 1, null, null));
-            UntypedResultSet rows = UntypedResultSet.create(((ResultMessage.Rows) result).result);
-            rows.forEach(r -> {
-                retrievalCount.incrementAndGet();
-            });
-        }
 
-        Assert.assertEquals(searches, retrievalCount.get());
-
-    }
 }
